@@ -80,3 +80,27 @@ def test_buy_and_hold():
     ind = compute_all(synthetic())
     bh = buy_and_hold(ind)
     assert bh["max_drawdown"] <= 0.0
+
+
+def test_volume_avg_excludes_current_day():
+    """A média de volume da razão deve ser a dos 20 dias ANTERIORES (shift(1))."""
+    from indicators import volume_ratio
+    df = synthetic()
+    avg, _ = volume_ratio(df["volume"], 20)
+    vol = df["volume"].to_numpy()
+    for t in (300, 500, 800):
+        expected = float(vol[t - 20:t].mean())      # exclui o dia t
+        assert abs(float(avg.iloc[t]) - expected) < 1e-6
+
+
+def test_adx_filter_requires_direction():
+    """O filtro de ADX exige força E direção compradora: todo sinal com o filtro
+    de ADX deve ter ADX>25 e +DI>−DI (ADX mede força, não direção)."""
+    from signals import combo_signal
+    ind = compute_all(synthetic())
+    sig = combo_signal(ind, {"base": "20d", "adx": True})
+    days = ind.index[sig.to_numpy()]
+    assert len(days) > 0
+    for d in days:
+        assert ind.loc[d, "adx"] > 25.0
+        assert ind.loc[d, "plus_di"] > ind.loc[d, "minus_di"]

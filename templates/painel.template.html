@@ -166,7 +166,7 @@
   function comboLabel(f){
     let s=f.base==="52w"?"Nova máxima 52 semanas":"Rompimento 20 dias";
     if(f.vol==="1.5")s+=" + volume ≥1,5×"; else if(f.vol==="2")s+=" + volume ≥2×";
-    if(f.sma)s+=" + SMA200"; if(f.adx)s+=" + ADX>25";
+    if(f.sma)s+=" + SMA200"; if(f.adx)s+=" + ADX>25 (+DI>−DI)";
     return s;
   }
   const matchPreset=f=>{const k=comboKey(f);return STRATS.find(s=>s.ckey===k);};
@@ -299,7 +299,7 @@
           </div></div>
         <div class="fgroup"><span class="flab">Filtros</span>
           <button class="ftog" data-tog="sma" aria-pressed="${f.sma}">SMA200</button>
-          <button class="ftog" data-tog="adx" aria-pressed="${f.adx}">ADX&gt;25</button>
+          <button class="ftog" data-tog="adx" aria-pressed="${f.adx}" title="ADX>25 e +DI>−DI (força de alta)">ADX&gt;25 ↑</button>
         </div>
         <div class="fnote">${preset?`= preset <b>${preset.short}</b>`:`combinação livre`}</div>
       </div>
@@ -346,7 +346,7 @@
 
       <div class="card">
         <h3>ADX (força da tendência)</h3>
-        <div class="sub">ADX &gt; 25 = tendência forte (linha marcada). +DI acima de −DI = força compradora.</div>
+        <div class="sub">ADX &gt; 25 = tendência forte (linha marcada). O filtro "ADX" exige <b>ADX&gt;25 e +DI&gt;−DI</b> — força forte <b>e</b> compradora (ADX sozinho não indica direção).</div>
         <div class="legend">
           <span class="it"><span class="swatch" style="background:var(--accent)"></span>ADX</span>
           <span class="it"><span class="swatch" style="background:var(--di-p)"></span>+DI</span>

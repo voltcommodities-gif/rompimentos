@@ -24,12 +24,12 @@ def rolling_high(high: pd.Series, window: int) -> pd.Series:
 
 
 def volume_ratio(volume: pd.Series, window: int = 20) -> tuple[pd.Series, pd.Series]:
-    """Volume médio de `window` dias e razão volume_do_dia / média.
+    """Volume médio dos `window` dias ANTERIORES e razão volume_do_dia / média.
 
-    A média usa .shift(1)? Não: a razão compara o volume de HOJE com a média
-    dos últimos `window` dias incluindo hoje (padrão de mercado). Como o volume
-    do dia é conhecido no fechamento, não há look-ahead."""
-    avg = volume.rolling(window).mean()
+    A média exclui o dia atual (.shift(1)), pela mesma lógica do canal de
+    Donchian: assim o pico de volume que estamos tentando detectar não é diluído
+    na sua própria média de referência."""
+    avg = volume.rolling(window).mean().shift(1)
     ratio = volume / avg.replace(0.0, np.nan)
     return avg, ratio
 

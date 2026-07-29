@@ -16,7 +16,7 @@ STRATEGY_LABELS = {
     "s3": "20d + volume 2×",
     "s4": "52 semanas + volume 1,5×",
     "s5": "20d + volume 1,5× + SMA200",
-    "s6": "20d + volume 1,5× + ADX>25",
+    "s6": "20d + volume 1,5× + ADX>25 (+DI>−DI)",
 }
 
 # rótulos curtos para os botões
@@ -80,7 +80,10 @@ def combo_signal(df: pd.DataFrame, c: dict) -> pd.Series:
     if c.get("sma"):
         ev = ev & (close > df["sma200"])
     if c.get("adx"):
-        ev = ev & (df["adx"] > 25.0)
+        # ADX mede FORÇA, não direção (Murphy): exige tendência forte E que a
+        # força seja compradora (+DI > −DI), senão o rompimento de alta poderia
+        # passar num repique dentro de tendência de baixa.
+        ev = ev & (df["adx"] > 25.0) & (df["plus_di"] > df["minus_di"])
     return ev.fillna(False).astype(bool)
 
 

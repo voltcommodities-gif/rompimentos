@@ -32,7 +32,7 @@ Seis sinais de **compra** (a estratégia 1 é o grupo de **controle**):
 | 3 | `s3` + volume 2× | sinal 1 **e** volume ≥ 2× a média |
 | 4 | `s4` 52 semanas | nova máxima de 52 semanas **e** volume ≥ 1,5× |
 | 5 | `s5` + SMA200 | sinal 2 **e** preço > SMA200 (tendência de alta) |
-| 6 | `s6` + ADX>25 | sinal 2 **e** ADX > 25 (mercado em tendência) |
+| 6 | `s6` + ADX>25 | sinal 2 **e** ADX > 25 **e** +DI > −DI (tendência forte **e** de alta) |
 
 Backtest por estratégia (sem sobreposição de trades):
 
@@ -130,9 +130,12 @@ Tickers inexistentes ou com histórico curto são ignorados com aviso no log.
   **rompimento** de 20 dias é o preço fechar acima da maior máxima dos 20 dias
   anteriores — ou seja, fazer uma **nova máxima**. É a base das estratégias
   "seguidoras de tendência" (a clássica regra das 4 semanas).
-- **Razão de volume:** volume do dia ÷ volume médio de 20 dias. Um rompimento com
+- **Razão de volume:** volume do dia ÷ volume médio dos **20 dias anteriores**
+  (a média exclui o dia atual, para não diluir o pico na própria referência). Um rompimento com
   razão **≥ 1,5×** significa que a alta veio com **participação/força** acima do
   normal — a ideia é que rompimentos com volume "furam" melhor a resistência.
 - **ADX (+DI / −DI):** mede a **força** de uma tendência (não a direção), de 0 a
   100. **Acima de 25** costuma indicar tendência forte; abaixo, mercado de lado.
-  **+DI** acima de **−DI** indica pressão compradora dominante.
+  **+DI** acima de **−DI** indica pressão compradora dominante. Como o ADX não diz
+  o sentido, o filtro de ADX do painel exige **ADX>25 E +DI>−DI** — força forte
+  **e** de alta (evita passar num repique dentro de tendência de baixa).
