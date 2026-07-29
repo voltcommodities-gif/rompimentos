@@ -70,7 +70,15 @@
   .seg button:last-child{border-right:0}
   .seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
   .seg .lab{font-size:9px;display:block;opacity:.75;letter-spacing:.03em}
-  .stratseg{margin-bottom:14px}
+  .filterbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:16px;
+    padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
+  .fgroup{display:flex;align-items:center;gap:8px}
+  .flab{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .ftog{font-family:var(--mono);font-size:12px;font-weight:600;cursor:pointer;color:var(--secondary);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:7px 12px}
+  .ftog[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .fnote{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .fnote b{color:var(--accent)}
 
   .statline{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px}
   .statline .s{font-size:13px;color:var(--secondary)}
@@ -148,7 +156,20 @@
   const fmtN=(x,d=2)=>x==null?"—":x.toFixed(d);
   const fmtVol=v=>{v=Math.abs(v);return v>=1e9?(v/1e9).toFixed(1)+"B":v>=1e6?(v/1e6).toFixed(1)+"M":v>=1e3?(v/1e3).toFixed(0)+"k":v.toFixed(0);};
 
-  let state={ticker:TICKERS[0], strat:"s1", range:"3A", pscale:"lin"};
+  let state={ticker:TICKERS[0],
+    filters:{base:"20d", vol:"off", sma:false, adx:false},
+    range:"3A", pscale:"lin"};
+
+  /* ---------- seleção de combinação (backtests pré-calculados no Python) ----------
+     as 24 combinações já vêm prontas em D.combos, indexadas por comboKey. */
+  const comboKey=f=>`${f.base}|${f.vol}|${f.sma?1:0}|${f.adx?1:0}`;
+  function comboLabel(f){
+    let s=f.base==="52w"?"Nova máxima 52 semanas":"Rompimento 20 dias";
+    if(f.vol==="1.5")s+=" + volume ≥1,5×"; else if(f.vol==="2")s+=" + volume ≥2×";
+    if(f.sma)s+=" + SMA200"; if(f.adx)s+=" + ADX>25";
+    return s;
+  }
+  const matchPreset=f=>{const k=comboKey(f);return STRATS.find(s=>s.ckey===k);};
 
   /* ---------- motor de gráfico SVG ---------- */
   function makeSVG(w,h){const s=document.createElementNS("http://www.w3.org/2000/svg","svg");
@@ -240,30 +261,47 @@
 
   /* ---------- view de uma ação ---------- */
   function stockView(){
-    const tk=state.ticker,D=DATA[tk];
-    if(!STRATS.find(s=>s.key===state.strat))state.strat="s1";
-    const S=D.strategies[state.strat],m=S.m,bh=D.buy_hold;
+    const tk=state.ticker,D=DATA[tk],f=state.filters;
+    const C=D.combos[comboKey(f)];
+    const m=C.m, trades=C.trades, bh=D.buy_hold;
     const beat=m.total_return>bh.total_return;
+    const preset=matchPreset(f), label=comboLabel(f);
 
     const NN=D.dates.length,RANGE={"1A":252,"3A":756,"5A":1260,"tudo":NN};
     const start=Math.max(0,NN-(RANGE[state.range]||NN));
     const sl=a=>a.slice(start);
-    const slStr=s=>s.slice(start).split("").map(Number);
+    // faixa "posicionado" reconstruída dos trades (entrada+1 .. saída)
+    const inpos=new Array(NN).fill(false);
+    trades.forEach(t=>{for(let k=t.ei+1;k<=t.xi;k++)inpos[k]=true;});
 
-    // marcadores da estratégia selecionada
+    // marcadores da combinação atual (▲ verde = c/ volume, ▲ cinza = s/ volume)
     const good=css("--good"),bad=css("--bad"),gray=css("--gray");
     const mk=[];
-    S.buys.forEach((bi,k)=>{if(bi>=start){const t=S.trades[k];
-      mk.push({idx:bi-start,dir:1,color:(t.vr!=null&&t.vr>=1.5)?good:gray});}});
-    S.sells.forEach((si)=>{if(si>=start)mk.push({idx:si-start,dir:-1,color:bad});});
+    trades.forEach(t=>{if(t.ei>=start)mk.push({idx:t.ei-start,dir:1,color:(t.vr!=null&&t.vr>=1.5)?good:gray});
+      if(t.xi>=start)mk.push({idx:t.xi-start,dir:-1,color:bad});});
 
     const v=document.getElementById("view");
     v.innerHTML=`
       <div class="head">
         <div class="title"><h2>${tk}</h2><span class="full">${META.start} – ${META.end} · fechamento ajustado</span></div>
       </div>
-      <div class="seg stratseg" role="group" aria-label="Estratégia">
-        ${STRATS.map(s=>`<button data-strat="${s.key}" aria-pressed="${s.key===state.strat}">${s.short}<span class="lab">${D.strategies[s.key].m.n_trades} trades</span></button>`).join("")}
+      <div class="filterbar">
+        <div class="fgroup"><span class="flab">Base</span>
+          <div class="seg" role="group" aria-label="Base do rompimento">
+            <button data-base="20d" aria-pressed="${f.base==="20d"}">Rompimento 20d</button>
+            <button data-base="52w" aria-pressed="${f.base==="52w"}">52 semanas</button>
+          </div></div>
+        <div class="fgroup"><span class="flab">Volume</span>
+          <div class="seg" role="group" aria-label="Filtro de volume">
+            <button data-vol="off" aria-pressed="${f.vol==="off"}">Sem</button>
+            <button data-vol="1.5" aria-pressed="${f.vol==="1.5"}">≥1,5×</button>
+            <button data-vol="2" aria-pressed="${f.vol==="2"}">≥2×</button>
+          </div></div>
+        <div class="fgroup"><span class="flab">Filtros</span>
+          <button class="ftog" data-tog="sma" aria-pressed="${f.sma}">SMA200</button>
+          <button class="ftog" data-tog="adx" aria-pressed="${f.adx}">ADX&gt;25</button>
+        </div>
+        <div class="fnote">${preset?`= preset <b>${preset.short}</b>`:`combinação livre`}</div>
       </div>
       <div class="statline">
         <span class="s">Retorno estratégia <b class="${m.total_return>=0?"pos":"neg"}">${fmtPct(m.total_return)}</b></span>
@@ -278,7 +316,7 @@
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-          <div><h3>Preço, canal de Donchian e rompimentos — ${S.label}</h3>
+          <div><h3>Preço, canal de Donchian e rompimentos — ${label}</h3>
             <div class="sub">Banda azul = canal de 20 dias (máx/mín). ▲ verde = rompimento com volume ≥ 1,5×; ▲ cinza = rompimento sem volume; ▼ saída. Faixa clara = posicionado.</div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <div class="seg" role="group" aria-label="Período">
@@ -320,7 +358,7 @@
 
       <div class="card">
         <h3>Métricas do backtest</h3>
-        <div class="sub">Estratégia <b>${S.label}</b> vs. comprar e segurar. Saída: fechamento abaixo da mínima de 10 dias ou stop de 8%.</div>
+        <div class="sub">Combinação atual: <b>${label}</b> vs. comprar e segurar. Saída: fechamento abaixo da mínima de 10 dias ou stop de 8%.</div>
         <div class="table-host"><table id="metricsTable"></table></div>
       </div>
 
@@ -332,7 +370,7 @@
 
       <div class="card">
         <h3>Últimos sinais</h3>
-        <div class="sub">Estratégia <b>${S.label}</b> — últimos ${Math.min(20,S.trades.length)} de ${S.trades.length} trades (mais recentes primeiro).</div>
+        <div class="sub">Combinação <b>${label}</b> — últimos ${Math.min(20,trades.length)} de ${trades.length} trades (mais recentes primeiro).</div>
         <div class="table-host"><table id="signalsTable"></table></div>
       </div>
 
@@ -341,7 +379,7 @@
 
     // ---- gráfico de preço ----
     tsChart(document.getElementById("host-price"),document.getElementById("tt-price"),{
-      dates:sl(D.dates),height:340,log:state.pscale==="log",shade:slStr(S.inpos),
+      dates:sl(D.dates),height:340,log:state.pscale==="log",shade:sl(inpos),
       band:{hi:sl(D.dch_high20),lo:sl(D.dch_low20)},
       markers:mk,markerVals:sl(D.close),
       lines:[{name:"Preço",vals:sl(D.close),color:css("--ink"),width:1.6},
@@ -370,9 +408,11 @@
 
     renderMetrics(m,bh);
     renderComp(D);
-    renderSignals(S);
+    renderSignals(trades);
 
-    v.querySelectorAll("[data-strat]").forEach(b=>b.addEventListener("click",()=>{state.strat=b.dataset.strat;stockView();}));
+    v.querySelectorAll("[data-base]").forEach(b=>b.addEventListener("click",()=>{state.filters.base=b.dataset.base;stockView();}));
+    v.querySelectorAll("[data-vol]").forEach(b=>b.addEventListener("click",()=>{state.filters.vol=b.dataset.vol;stockView();}));
+    v.querySelectorAll("[data-tog]").forEach(b=>b.addEventListener("click",()=>{state.filters[b.dataset.tog]=!state.filters[b.dataset.tog];stockView();}));
     v.querySelectorAll("[data-rg]").forEach(b=>b.addEventListener("click",()=>{state.range=b.dataset.rg;stockView();}));
     v.querySelectorAll("[data-ps]").forEach(b=>b.addEventListener("click",()=>{state.pscale=b.dataset.ps;stockView();}));
   }
@@ -398,7 +438,8 @@
   }
 
   function renderComp(D){
-    const ctrl=D.strategies.s1.m;
+    const cm=s=>D.combos[s.ckey].m;
+    const ctrl=cm(STRATS.find(s=>s.key==="s1"));
     // direção "melhor": maior é melhor, exceto DD (maior=menos negativo=melhor também)
     const cols=[
       {t:"Trades",g:m=>m.n_trades,f:m=>m.n_trades,cmp:false},
@@ -409,7 +450,7 @@
       {t:"DD máx.",g:m=>m.max_drawdown,f:m=>fmtN(m.max_drawdown,1)+"%",cmp:true},
       {t:"Dias",g:m=>m.avg_days,f:m=>m.avg_days,cmp:false}];
     const head=`<thead><tr><th class="metric-name">Estratégia</th>${cols.map(c=>`<th>${c.t}</th>`).join("")}</tr></thead>`;
-    const body=STRATS.map(s=>{const m=D.strategies[s.key].m,isCtrl=s.key==="s1";
+    const body=STRATS.map(s=>{const m=cm(s),isCtrl=s.key==="s1";
       const tds=cols.map(c=>{const val=c.f(m);
         if(!c.cmp||isCtrl)return `<td>${val}</td>`;
         const a=c.g(m),b=c.g(ctrl);
@@ -421,9 +462,9 @@
     document.getElementById("compTable").innerHTML=head+"<tbody>"+body+"</tbody>";
   }
 
-  function renderSignals(S){
+  function renderSignals(allTrades){
     const t=document.getElementById("signalsTable");
-    const last=S.trades.slice(-20).reverse();
+    const last=allTrades.slice(-20).reverse();
     if(!last.length){t.innerHTML='<tbody><tr><td class="muted">Nenhum trade nesta estratégia.</td></tr></tbody>';return;}
     t.innerHTML=`<thead><tr><th>Entrada</th><th>Preço</th><th>Vol×</th><th>Saída</th><th>Preço</th><th>Resultado</th><th>Dias</th><th>Motivo</th></tr></thead><tbody>`+
       last.map(tr=>`<tr><td>${tr.entry_date}</td><td>${numBR.format(tr.entry_price)}</td>

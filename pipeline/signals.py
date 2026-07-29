@@ -29,6 +29,16 @@ STRATEGY_SHORT = {
     "s6": "+ADX>25",
 }
 
+# cada preset expresso como combinação de filtros (usado pelo painel interativo)
+STRATEGY_COMBO = {
+    "s1": {"base": "20d"},
+    "s2": {"base": "20d", "vol": "1.5"},
+    "s3": {"base": "20d", "vol": "2"},
+    "s4": {"base": "52w", "vol": "1.5"},
+    "s5": {"base": "20d", "vol": "1.5", "sma": True},
+    "s6": {"base": "20d", "vol": "1.5", "adx": True},
+}
+
 VOL_STRONG = 1.5  # confirmação por volume
 VOL_VERY_STRONG = 2.0
 
@@ -39,24 +49,41 @@ def _breakout_event(close: pd.Series, level: pd.Series) -> pd.Series:
     return above & ~above.shift(1, fill_value=False)
 
 
-def compute_signals(df: pd.DataFrame) -> dict[str, pd.Series]:
+BASES = ["20d", "52w"]
+VOLS = ["off", "1.5", "2"]
+
+
+def combo_key(base: str, vol: str, sma: bool, adx: bool) -> str:
+    return f"{base}|{vol}|{1 if sma else 0}|{1 if adx else 0}"
+
+
+def all_combos() -> list[dict]:
+    """As 24 combinações possíveis de filtros (base × volume × SMA200 × ADX)."""
+    out = []
+    for base in BASES:
+        for vol in VOLS:
+            for sma in (False, True):
+                for adx in (False, True):
+                    out.append(dict(base=base, vol=vol, sma=sma, adx=adx))
+    return out
+
+
+def combo_signal(df: pd.DataFrame, c: dict) -> pd.Series:
+    """Sinal de compra para uma combinação de filtros qualquer."""
     close = df["close"]
-    vr = df["vol_ratio"]
-    ev20 = _breakout_event(close, df["dch_high20"])
-    ev52 = _breakout_event(close, df["high52w"])
+    level = df["high52w"] if c.get("base") == "52w" else df["dch_high20"]
+    ev = _breakout_event(close, level)
+    if c.get("vol") == "1.5":
+        ev = ev & (df["vol_ratio"] >= VOL_STRONG)
+    elif c.get("vol") == "2":
+        ev = ev & (df["vol_ratio"] >= VOL_VERY_STRONG)
+    if c.get("sma"):
+        ev = ev & (close > df["sma200"])
+    if c.get("adx"):
+        ev = ev & (df["adx"] > 25.0)
+    return ev.fillna(False).astype(bool)
 
-    vol15 = vr >= VOL_STRONG
-    vol20 = vr >= VOL_VERY_STRONG
-    trend = close > df["sma200"]
-    strong_adx = df["adx"] > 25.0
 
-    sig = {
-        "s1": ev20,                                  # rompimento puro (controle)
-        "s2": ev20 & vol15,                          # + volume 1,5×
-        "s3": ev20 & vol20,                          # + volume 2×
-        "s4": ev52 & vol15,                          # nova máx. 52s + volume
-        "s5": ev20 & vol15 & trend,                  # + volume + tendência
-        "s6": ev20 & vol15 & strong_adx,             # + volume + ADX
-    }
-    # NaN nos indicadores (aquecimento) -> sem sinal
-    return {k: v.fillna(False).astype(bool) for k, v in sig.items()}
+def compute_signals(df: pd.DataFrame) -> dict[str, pd.Series]:
+    """Os 6 presets, expressos como combinações de filtros."""
+    return {k: combo_signal(df, STRATEGY_COMBO[k]) for k in STRATEGIES}

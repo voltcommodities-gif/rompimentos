@@ -61,6 +61,7 @@ def backtest_strategy(df: pd.DataFrame, signals: pd.Series) -> dict:
         buy_idx.append(int(i))
         sell_idx.append(int(exit_idx))
         trades.append(dict(
+            ei=int(i), xi=int(exit_idx),           # índices p/ marcadores no gráfico
             entry_date=dates[i].strftime("%Y-%m-%d"),
             entry_price=round(entry_price, 2),
             exit_date=dates[exit_idx].strftime("%Y-%m-%d"),

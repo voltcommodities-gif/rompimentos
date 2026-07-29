@@ -13,7 +13,8 @@ import pandas as pd
 from backtest import backtest_strategy, buy_and_hold
 from data import load_ohlcv, read_tickers
 from indicators import compute_all
-from signals import STRATEGIES, STRATEGY_LABELS, STRATEGY_SHORT, compute_signals
+from signals import (STRATEGIES, STRATEGY_COMBO, STRATEGY_LABELS,
+                     STRATEGY_SHORT, all_combos, combo_key, combo_signal)
 
 HERE = Path(__file__).resolve().parent.parent
 DOCS = HERE / "docs"
@@ -38,21 +39,26 @@ def process_ticker(ticker: str, start: str, end: str, use_cache: bool):
         return None, None
 
     ind = compute_all(df)
-    sig = compute_signals(ind)
     dates = [d.strftime("%Y-%m-%d") for d in ind.index]
     bh = buy_and_hold(ind)
 
-    strategies, active, returns = {}, {}, {}
-    for key in STRATEGIES:
-        bt = backtest_strategy(ind, sig[key])
-        active[key] = bool(sig[key].iloc[-1])
-        returns[key] = bt["metrics"]["total_return"]
-        strategies[key] = dict(
-            label=STRATEGY_LABELS[key], short=STRATEGY_SHORT[key],
-            m=bt["metrics"], trades=bt["trades"],
-            buys=bt["buys"], sells=bt["sells"], inpos=bt["inpos"],
-            active_today=active[key],
+    # pré-calcula TODAS as 24 combinações (base × volume × SMA200 × ADX), em
+    # precisão cheia. O painel só seleciona a combinação -> statline, Comparativo
+    # e tabela ficam sempre consistentes (sem recalcular no navegador).
+    combos = {}
+    for c in all_combos():
+        s = combo_signal(ind, c)
+        bt = backtest_strategy(ind, s)
+        combos[combo_key(c["base"], c["vol"], c["sma"], c["adx"])] = dict(
+            m=bt["metrics"], trades=bt["trades"], active=bool(s.iloc[-1]),
         )
+
+    def pkey(k):
+        cc = STRATEGY_COMBO[k]
+        return combo_key(cc.get("base", "20d"), cc.get("vol", "off"),
+                         cc.get("sma", False), cc.get("adx", False))
+    active = {k: combos[pkey(k)]["active"] for k in STRATEGIES}
+    returns = {k: combos[pkey(k)]["m"]["total_return"] for k in STRATEGIES}
 
     panel = dict(
         dates=dates,
@@ -68,7 +74,7 @@ def process_ticker(ticker: str, start: str, end: str, use_cache: bool):
         adx=_rs(ind["adx"], 1),
         plus_di=_rs(ind["plus_di"], 1),
         minus_di=_rs(ind["minus_di"], 1),
-        strategies=strategies,
+        combos=combos,
         buy_hold=bh,
     )
 
@@ -129,7 +135,12 @@ def main(argv=None) -> None:
             start=args.start, end=args.end,
             generated=datetime.today().strftime("%Y-%m-%d %H:%M"),
             near_pct=NEAR_PCT * 100,
-            strategies=[dict(key=k, label=STRATEGY_LABELS[k], short=STRATEGY_SHORT[k])
+            strategies=[dict(key=k, label=STRATEGY_LABELS[k], short=STRATEGY_SHORT[k],
+                             combo=STRATEGY_COMBO[k],
+                             ckey=combo_key(STRATEGY_COMBO[k].get("base", "20d"),
+                                            STRATEGY_COMBO[k].get("vol", "off"),
+                                            STRATEGY_COMBO[k].get("sma", False),
+                                            STRATEGY_COMBO[k].get("adx", False)))
                         for k in STRATEGIES],
         ),
         tickers=order,

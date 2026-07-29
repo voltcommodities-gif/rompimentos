@@ -43,7 +43,14 @@ Backtest por estratégia (sem sobreposição de trades):
   (ganho médio ÷ perda média), retorno total, drawdown máximo, tempo médio em
   dias, e o **buy & hold** do mesmo período.
 
-O painel traz um **Comparativo** lado a lado das 6 estratégias, destacando em
+No painel os filtros são **combináveis livremente**: você escolhe a base
+(rompimento de 20 dias ou nova máxima de 52 semanas) e liga/desliga **volume**
+(≥1,5× / ≥2×), **SMA200** e **ADX>25** em qualquer combinação — inclusive as que
+não são preset (ex.: volume + SMA200 + ADX ao mesmo tempo). As **24 combinações**
+possíveis são pré-calculadas em Python (precisão cheia), então o painel só
+seleciona — statline, Comparativo e tabelas ficam sempre consistentes.
+
+O **Comparativo** mostra as 6 estratégias-referência lado a lado, destacando em
 verde/vermelho se cada filtro **melhorou** ou **piorou** vs. o rompimento puro —
 essa é a pergunta central do estudo.
 
